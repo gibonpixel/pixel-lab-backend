@@ -1,52 +1,53 @@
 from fastapi import APIRouter, Query
-from database import get_db, close_db
+from database import get_db_connection, close_db_connection
 
 router = APIRouter(prefix="/api/goods", tags=["goods"])
 
 @router.get("/")
-async def get_all_goods(
+def get_all_goods(
     category: str = Query(None),
     type: str = Query(None),
     search: str = Query(None)
 ):
-    conn = await get_db()
+    conn = get_db_connection()
+    cur = conn.cursor()
     
     query = "SELECT * FROM goods WHERE 1=1"
     params = []
-    param_count = 1
     
     if category and category != "all":
-        query += f" AND category = ${param_count}"
+        query += " AND category = %s"
         params.append(category)
-        param_count += 1
     
     if type and type != "all":
-        query += f" AND type = ${param_count}"
+        query += " AND type = %s"
         params.append(type)
-        param_count += 1
     
     if search:
-        query += f" AND (name ILIKE $${param_count} OR description ILIKE $${param_count})"
+        query += " AND (name ILIKE %s OR description ILIKE %s)"
         params.append(f"%{search}%")
     
     query += " ORDER BY id"
     
-    rows = await conn.fetch(query, *params)
-    await close_db(conn)
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    cur.close()
+    close_db_connection(conn)
     
-    result = []
-    for row in rows:
-        result.append(dict(row))
-    
-    return result
+    return rows
 
 @router.get("/{goods_id}")
-async def get_goods(goods_id: int):
-    conn = await get_db()
-    row = await conn.fetchrow("SELECT * FROM goods WHERE id = $1", goods_id)
-    await close_db(conn)
+def get_goods(goods_id: int):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT * FROM goods WHERE id = %s", (goods_id,))
+    row = cur.fetchone()
+    
+    cur.close()
+    close_db_connection(conn)
     
     if not row:
         return {"error": "Товар не найден"}
     
-    return dict(row)
+    return row

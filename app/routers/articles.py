@@ -1,35 +1,39 @@
 from fastapi import APIRouter, Query
-from database import get_db, close_db
+from database import get_db_connection, close_db_connection
 
 router = APIRouter(prefix="/api/articles", tags=["articles"])
 
 @router.get("/")
-async def get_all_articles(search: str = Query(None)):
-    conn = await get_db()
+def get_all_articles(search: str = Query(None)):
+    conn = get_db_connection()
+    cur = conn.cursor()
     
     if search:
-        rows = await conn.fetch(
-            "SELECT * FROM articles WHERE title ILIKE $1 OR content ILIKE $1 ORDER BY id",
-            f"%{search}%"
+        cur.execute(
+            "SELECT * FROM articles WHERE title ILIKE %s OR content ILIKE %s ORDER BY id",
+            (f"%{search}%", f"%{search}%")
         )
     else:
-        rows = await conn.fetch("SELECT * FROM articles ORDER BY id")
+        cur.execute("SELECT * FROM articles ORDER BY id")
     
-    await close_db(conn)
+    rows = cur.fetchall()
+    cur.close()
+    close_db_connection(conn)
     
-    result = []
-    for row in rows:
-        result.append(dict(row))
-    
-    return result
+    return rows
 
 @router.get("/{article_id}")
-async def get_article(article_id: str):
-    conn = await get_db()
-    row = await conn.fetchrow("SELECT * FROM articles WHERE id = $1", article_id)
-    await close_db(conn)
+def get_article(article_id: str):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT * FROM articles WHERE id = %s", (article_id,))
+    row = cur.fetchone()
+    
+    cur.close()
+    close_db_connection(conn)
     
     if not row:
         return {"error": "Статья не найдена"}
     
-    return dict(row)
+    return row

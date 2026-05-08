@@ -1,47 +1,43 @@
 from fastapi import APIRouter, Query
-from database import get_db, close_db
+from database import get_db_connection, close_db_connection
 
 router = APIRouter(prefix="/api/requests", tags=["requests"])
 
 @router.get("/")
-async def get_all_requests(
+def get_all_requests(
     status: str = Query(None),
     type: str = Query(None),
     search: str = Query(None)
 ):
-    conn = await get_db()
+    conn = get_db_connection()
+    cur = conn.cursor()
     
     query = "SELECT * FROM requests WHERE 1=1"
     params = []
-    param_count = 1
     
     if status and status != "all":
-        query += f" AND status = ${param_count}"
+        query += " AND status = %s"
         params.append(status)
-        param_count += 1
     
     if type and type != "all":
-        query += f" AND request_type = ${param_count}"
+        query += " AND request_type = %s"
         params.append(type)
-        param_count += 1
     
     if search:
-        query += f" AND (name ILIKE $${param_count} OR phone ILIKE $${param_count})"
+        query += " AND (name ILIKE %s OR phone ILIKE %s)"
         params.append(f"%{search}%")
     
     query += " ORDER BY created_at DESC"
     
-    rows = await conn.fetch(query, *params)
-    await close_db(conn)
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    cur.close()
+    close_db_connection(conn)
     
-    result = []
-    for row in rows:
-        result.append(dict(row))
-    
-    return result
+    return rows
 
 @router.post("/")
-async def create_request(
+def create_request(
     request_type: str,
     name: str,
     phone: str,
@@ -49,13 +45,18 @@ async def create_request(
     product: str = None,
     message: str = None
 ):
-    conn = await get_db()
+    conn = get_db_connection()
+    cur = conn.cursor()
     
-    row = await conn.fetchrow(
+    cur.execute(
         """INSERT INTO requests (request_type, name, phone, service, product, message, status)
-           VALUES ($1, $2, $3, $4, $5, $6, 'new') RETURNING *""",
-        request_type, name, phone, service, product, message
+           VALUES (%s, %s, %s, %s, %s, %s, 'new') RETURNING *""",
+        (request_type, name, phone, service, product, message)
     )
     
-    await close_db(conn)
-    return dict(row)
+    row = cur.fetchone()
+    conn.commit()
+    cur.close()
+    close_db_connection(conn)
+    
+    return row
