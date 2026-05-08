@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import issues, goods, articles, requests
+from app.routers import issues, goods, articles, requests
 
 app = FastAPI(title="Pixel Lab API", description="API для сайта Pixel Lab", version="1.0.0")
 
